@@ -182,48 +182,40 @@ With body:
 ```javascript
 {
 	"Image": "jeroenpeeters/docker-ssh",
-	"Env": [
-	    "AUTH_MECHANISM=noAuth",
-	    "FILTER={\"name\":[\"^/content_db_1$\"]}"
-	],
-    "Ports": [
-        {
-            "IP": "0.0.0.0",
-            "PrivatePort": 22,
-            "PublicPort": 2222,
-            "Type": "tcp"
-        },
-        {
-            "IP": "0.0.0.0",
-            "PrivatePort": 8022,
-            "PublicPort": 8022,
-            "Type": "tcp"
-        }        
-    ],
-	"ExposedPorts": {
-		    "22/tcp": {},
-		    "8022/tcp": {}
-	},
+	
+	"Name" : "content_ssh_2",
+	
 	"HostConfig": {
-		"Binds": [
-			"/var/run/docker.sock:/var/run/docker.sock",
-			"/usr/bin/docker:/usr/bin/docker"
-		],
-		"PortBinding": {
-			"22/tcp": [
-				{
-					"HostIp": "0.0.0.0",
-					"HostPort": "2222"
-				}
-			], 
-			"8022/tcp": [
-				{
-					"HostIp": "0.0.0.0",
-					"HostPort": "8022"
-				}
-			] 
-		}
-	}
+			"Binds": [
+				"/var/run/docker.sock:/var/run/docker.sock:rw",
+				"/usr/bin/docker:/usr/bin/docker:rw"
+				],
+            "PortBindings": {
+                "22/tcp": [
+                    {
+                        "HostIp": "0.0.0.0",
+                        "HostPort": "2220"
+                    }
+            	],
+				"8022/tcp": [
+                    {
+                        "HostIp": "0.0.0.0",
+                        "HostPort": "8822"
+                    }
+                ]
+            }
+	},
+	
+	"Env": [
+            "AUTH_MECHANISM=noAuth",
+            "CONTAINER=content_db_1",
+            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "CONTAINER_SHELL=bash",
+            "KEYPATH=./id_rsa",
+            "PORT=22",
+            "HTTP_ENABLED=true",
+            "HTTP_PORT=8022"
+			]
 }
 ```
 
@@ -239,14 +231,24 @@ We can reference a container by its Id or by its name.
 After creating the container we need to start it, otherwise it's just an image sitting there, doing nothing but aging:
 POST request to:
 ```bash
-http://192.168.1.98:2375/containers/content_ssh_2/start
+http://192.168.253.129:2375/containers/content_ssh_2/start
 ```
 Status 204 means everything went alright.
 
 Just to make sure we can check the containers list:
 ```bash
-http://192.168.1.98:2375/containers/json
+http://192.168.253.129:2375/containers/json
 ```
+
+OK, and now we can test it:
+```bash
+http://192.168.253.129:8822/
+```
+And we should get:
+
+<center><img alt="content_db_1 ssh web API" src="files/images/db_1-ssh.PNG" /></center>
+
+
 
 
 
