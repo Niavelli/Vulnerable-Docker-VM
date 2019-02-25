@@ -333,7 +333,7 @@ Nothing.
 
 Well, if you remeber we have two more containers: `content_ssh_1` and `content_wordpress_1` - maybe it's there?
 
-Trust, it's not. You can search for yourself by creating new ssh container and connects it to the `content_wordpress_1` container. This is to be done by only changing the `CONTAINER=content_wordpress_1` environment variable.
+Trust me, it's not. You can search for yourself by creating new ssh container and connects it to the `content_wordpress_1` container. This is to be done by only changing the `CONTAINER=content_wordpress_1` environment variable.
 
 OK, so if it's not on any of the containers, where can it be? Mmmmmm well ... all of these docker containers needs to run on a host, right? maybe it's there? But how to get access to the host's file system?
 
