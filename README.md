@@ -254,7 +254,7 @@ http://192.168.253.129:8822/
 
 And we should get:
 
-<center><img alt="content_db_1 ssh web API" src="files/images/db_1-ssh.png" /></center>
+<center><img src="/files/images/db1_ssh.png" /></center>
 
 This is the web API for the ssh connection of the ssh image we're using. Let's test this:
 
